@@ -29,7 +29,7 @@ $("#checkoutModal").onclick=e=>{if(e.target.id==="checkoutModal")$("#checkoutMod
 $("#checkoutForm").onsubmit=async e=>{
  e.preventDefault();if(!total())return;const form=e.target,button=form.querySelector('button[type="submit"]'),data=Object.fromEntries(new FormData(form).entries());
  const items=products.filter(p=>cart[p.id]).map(p=>({id:p.id,qty:cart[p.id]}));button.disabled=true;button.textContent="Sending order…";
- try{const response=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer:data,items})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||"Could not place your order.");cart={};save();form.reset();$("#checkoutModal").classList.remove("active");showToast("Order received — thank you! Reference: "+String(result.orderId||"").slice(0,8));await loadSiteSettings();loadProducts();}
+ try{const response=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer:data,items})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||"Could not place your order.");cart={};save();form.reset();$("#checkoutModal").classList.remove("active");showToast("Order received — thank you! Reference: "+String(result.orderId||"").slice(0,8));await loadProducts();}
  catch(error){showToast(error.message||"Connection error. Please try again.");}finally{button.disabled=false;button.textContent="Place order ↗";}
 };
 $("#newsletterForm").onsubmit=e=>{e.preventDefault();showToast("Thanks for joining the brüe letter!");e.target.reset();};
@@ -47,7 +47,7 @@ function applySiteSettings(s){
  const hero=$("#heroButton");if(hero)hero.href="#shop";
  const heroPhoto=document.querySelector(".hero-photo");if(heroPhoto&&s.heroImage)heroPhoto.style.backgroundImage='linear-gradient(90deg,#1d1511 0%,transparent 28%),url("'+String(s.heroImage).replace(/["\\\\]/g,"")+'")';
  const storyImage=$("#storyImage");if(storyImage&&s.storyImage)storyImage.style.backgroundImage='url("'+String(s.storyImage).replace(/["\\\\]/g,"")+'")';
- const intro=$("#introStrip");if(intro){intro.innerHTML=(s.introItems||"").split(/\\n+/).filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('<span>•</span>');intro.hidden=!s.showIntro;}
+ const intro=$("#introStrip");if(intro){intro.innerHTML=(s.introItems||"").split(/\n+/).filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('<span>•</span>');intro.hidden=!s.showIntro;}
  const story=document.querySelector(".story");if(story)story.hidden=!s.showStory;
  const newsletter=$("#newsletterSection");if(newsletter)newsletter.hidden=!s.showNewsletter;
  const note=$("#heroNote");if(note)note.hidden=!s.showHeroNote;
@@ -60,4 +60,4 @@ function applySiteSettings(s){
 }
 async function loadSiteSettings(){try{const r=await fetch("/api/site-settings",{cache:"no-store"});if(!r.ok)throw new Error("settings");const d=await r.json();applySiteSettings(d.settings);}catch(e){console.error("Could not load site settings",e);}}
 async function loadProducts(){try{const r=await fetch("/api/products",{cache:"no-store"});if(!r.ok)throw new Error("Could not load products.");const d=await r.json();products=Array.isArray(d.products)?d.products:[];renderProducts();renderCart();}catch(e){$("#productGrid").innerHTML='<p class="muted">Products could not be loaded. Please refresh the page.</p>';console.error(e);}}
-loadProducts();
+loadSiteSettings();loadProducts();
