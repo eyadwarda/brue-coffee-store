@@ -33,7 +33,7 @@ $("#checkoutForm").onsubmit=async e=>{
  catch(error){showToast(error.message||"Connection error. Please try again.");}finally{button.disabled=false;button.textContent="Place order ↗";}
 };
 $("#newsletterForm").onsubmit=e=>{e.preventDefault();showToast("Thanks for joining the brüe letter!");e.target.reset();};
-function setText(id,value){const el=$("#"+id);if(el&&value!=null)el.textContent=value;}
+function setText(id,value){const el=$("#"+id);if(el&&value!=null)el.textContent=String(value).replace(/\\n/g,"\n");}
 function applySiteSettings(s){
  if(!s)return;
  setText("heroEyebrow",s.heroEyebrow);setText("heroTitle",s.heroTitle);setText("heroText",s.heroText);setText("heroButton",s.heroButton+" ↗");setText("heroNote",s.heroNote);setText("heroIndex",s.heroIndex);
