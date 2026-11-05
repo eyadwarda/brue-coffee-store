@@ -47,7 +47,7 @@ function applySiteSettings(s){
  const hero=$("#heroButton");if(hero)hero.href="#shop";
  const heroPhoto=document.querySelector(".hero-photo");if(heroPhoto&&s.heroImage)heroPhoto.style.backgroundImage='linear-gradient(90deg,#1d1511 0%,transparent 28%),url("'+String(s.heroImage).replace(/["\\\\]/g,"")+'")';
  const storyImage=$("#storyImage");if(storyImage&&s.storyImage)storyImage.style.backgroundImage='url("'+String(s.storyImage).replace(/["\\\\]/g,"")+'")';
- const intro=$("#introStrip");if(intro){intro.innerHTML=(s.introItems||"").split(/\n+/).filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('<span>•</span>');intro.hidden=!s.showIntro;}
+ const intro=$("#introStrip");if(intro){const introLines=String(s.introItems||"").replace(/\\n/g,"\n").split(/\n+/).map(x=>x.trim()).filter(Boolean);intro.innerHTML=introLines.map(x=>'<span>'+esc(x)+'</span>').join('<span>•</span>');intro.hidden=!s.showIntro;}
  const story=document.querySelector(".story");if(story)story.hidden=!s.showStory;
  let custom=document.getElementById("customContentBlocks");if(!custom){custom=document.createElement("div");custom.id="customContentBlocks";const main=document.querySelector("main");const news=$("#newsletterSection");if(main&&news)main.insertBefore(custom,news);}
  if(custom){custom.innerHTML=[1,2,3].filter(i=>s["customBlock"+i+"Enabled"]).map(i=>'<section class="custom-content-block"><div class="custom-content-copy"><p class="eyebrow">BRÜE JOURNAL</p><h2>'+esc(s["customBlock"+i+"Title"]||"")+'</h2><p>'+esc(s["customBlock"+i+"Text"]||"")+'</p></div>'+(s["customBlock"+i+"Image"]?'<img src="'+esc(s["customBlock"+i+"Image"])+'" alt="">':'')+'</section>').join("");}
