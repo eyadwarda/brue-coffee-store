@@ -29,9 +29,35 @@ $("#checkoutModal").onclick=e=>{if(e.target.id==="checkoutModal")$("#checkoutMod
 $("#checkoutForm").onsubmit=async e=>{
  e.preventDefault();if(!total())return;const form=e.target,button=form.querySelector('button[type="submit"]'),data=Object.fromEntries(new FormData(form).entries());
  const items=products.filter(p=>cart[p.id]).map(p=>({id:p.id,qty:cart[p.id]}));button.disabled=true;button.textContent="Sending order…";
- try{const response=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer:data,items})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||"Could not place your order.");cart={};save();form.reset();$("#checkoutModal").classList.remove("active");showToast("Order received — thank you! Reference: "+String(result.orderId||"").slice(0,8));await loadProducts();}
+ try{const response=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer:data,items})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||"Could not place your order.");cart={};save();form.reset();$("#checkoutModal").classList.remove("active");showToast("Order received — thank you! Reference: "+String(result.orderId||"").slice(0,8));await loadSiteSettings();loadProducts();}
  catch(error){showToast(error.message||"Connection error. Please try again.");}finally{button.disabled=false;button.textContent="Place order ↗";}
 };
 $("#newsletterForm").onsubmit=e=>{e.preventDefault();showToast("Thanks for joining the brüe letter!");e.target.reset();};
+function setText(id,value){const el=$("#"+id);if(el&&value!=null)el.textContent=value;}
+function applySiteSettings(s){
+ if(!s)return;
+ setText("heroEyebrow",s.heroEyebrow);setText("heroTitle",s.heroTitle);setText("heroText",s.heroText);setText("heroButton",s.heroButton+" ↗");setText("heroNote",s.heroNote);setText("heroIndex",s.heroIndex);
+ setText("shopEyebrow",s.shopEyebrow);setText("shopTitle",s.shopTitle);setText("shopDescription",s.shopDescription);
+ setText("storyEyebrow",s.storyEyebrow);setText("storyTitle",s.storyTitle);setText("storyText",s.storyText);setText("storyFeature1",s.storyFeature1);setText("storyFeature2",s.storyFeature2);setText("storyFeature3",s.storyFeature3);
+ setText("newsletterEyebrow",s.newsletterEyebrow);setText("newsletterTitle",s.newsletterTitle);setText("newsletterText",s.newsletterText);setText("footerTagline",s.footerTagline);
+ const brand=String(s.brandName||"brüe");for(const id of ["brandLogo","footerLogo"]){const el=$("#"+id);if(el)el.textContent=brand+".";}
+ const email=$("#contactEmail");if(email){email.textContent=s.contactEmail;email.href="mailto:"+s.contactEmail;}
+ const phone=$("#contactPhone");if(phone){phone.textContent=s.contactPhone;phone.href="tel:"+s.contactPhone.replace(/[^0-9+]/g,"");}
+ const wa=$("#contactWhatsapp");if(wa){wa.href="https://wa.me/"+String(s.whatsappNumber||"").replace(/[^0-9]/g,"");}
+ const hero=$("#heroButton");if(hero)hero.href="#shop";
+ const heroPhoto=document.querySelector(".hero-photo");if(heroPhoto&&s.heroImage)heroPhoto.style.backgroundImage='linear-gradient(90deg,#1d1511 0%,transparent 28%),url("'+String(s.heroImage).replace(/["\\\\]/g,"")+'")';
+ const storyImage=$("#storyImage");if(storyImage&&s.storyImage)storyImage.style.backgroundImage='url("'+String(s.storyImage).replace(/["\\\\]/g,"")+'")';
+ const intro=$("#introStrip");if(intro){intro.innerHTML=(s.introItems||"").split(/\\n+/).filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('<span>•</span>');intro.hidden=!s.showIntro;}
+ const story=document.querySelector(".story");if(story)story.hidden=!s.showStory;
+ const newsletter=$("#newsletterSection");if(newsletter)newsletter.hidden=!s.showNewsletter;
+ const note=$("#heroNote");if(note)note.hidden=!s.showHeroNote;
+ const root=document.documentElement,vars={"--site-bg":s.background,"--site-text":s.textColor,"--site-accent":s.accent,"--site-card":s.cardColor,"--site-button":s.buttonColor,"--site-button-text":s.buttonText,"--site-newsletter":s.newsletterColor,"--site-base-size":s.baseFontSize+"px","--site-hero-size":s.heroFontSize+"px","--site-section-size":s.sectionFontSize+"px","--site-product-image-height":s.productImageHeight+"px","--site-content-width":s.contentWidth+"px","--site-product-columns":s.productColumns,"--site-section-spacing":s.sectionSpacing+"px","--site-body-font":'"'+s.bodyFont+'"",sans-serif',"--site-heading-font":'"'+s.headingFont+'"",serif'};
+ for(const [k,v] of Object.entries(vars))root.style.setProperty(k,v);
+ let fontLink=$("#siteGoogleFonts");if(!fontLink){fontLink=document.createElement("link");fontLink.id="siteGoogleFonts";fontLink.rel="stylesheet";document.head.appendChild(fontLink);}
+ const fonts=[s.bodyFont,s.headingFont].filter(f=>["DM Sans","Montserrat","Poppins","Lora","Playfair Display","Cormorant Garamond"].includes(f)).map(f=>f.replace(/ /g,"+")+":wght@400;500;600;700").join("&family=");
+ fontLink.href="https://fonts.googleapis.com/css2?family="+fonts+"&display=swap";
+ document.title=brand+" — A Better Kind of Brew";
+}
+async function loadSiteSettings(){try{const r=await fetch("/api/site-settings",{cache:"no-store"});if(!r.ok)throw new Error("settings");const d=await r.json();applySiteSettings(d.settings);}catch(e){console.error("Could not load site settings",e);}}
 async function loadProducts(){try{const r=await fetch("/api/products",{cache:"no-store"});if(!r.ok)throw new Error("Could not load products.");const d=await r.json();products=Array.isArray(d.products)?d.products:[];renderProducts();renderCart();}catch(e){$("#productGrid").innerHTML='<p class="muted">Products could not be loaded. Please refresh the page.</p>';console.error(e);}}
 loadProducts();
