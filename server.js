@@ -7,198 +7,45 @@ const rateLimit = require("express-rate-limit");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const path = require("path");
-
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const DATABASE_URL = process.env.DATABASE_URL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const SESSION_SECRET = process.env.SESSION_SECRET;
-
-if (!DATABASE_URL || !ADMIN_PASSWORD || !SESSION_SECRET) {
-  console.error("Missing required environment variables: DATABASE_URL, ADMIN_PASSWORD, SESSION_SECRET");
-  process.exit(1);
-}
-
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
-});
-
-const PRODUCTS = {
-  "br-01": { name: "Brazilian Coffee", price: 450 },
-  "br-02": { name: "Turkish Coffee", price: 400 },
-  "br-03": { name: "Colombian Coffee", price: 450 },
-  "br-04": { name: "Espresso Blend", price: 500 }
-};
-const STATUSES = ["New", "Confirmed", "Preparing", "Out for delivery", "Delivered", "Cancelled"];
-
-app.set("trust proxy", 1);
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "30kb" }));
-app.use(express.urlencoded({ extended: false, limit: "10kb" }));
-
-app.use(session({
-  store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }),
-  name: "brue_admin",
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 8 * 60 * 60 * 1000
-  }
-}));
-
-const orderLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: "draft-7", legacyHeaders: false });
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: "draft-7", legacyHeaders: false });
-
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.isAdmin === true) return next();
-  return res.status(401).json({ error: "Admin login required." });
-}
-function validText(value, max) {
-  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max;
-}
-function safeEqual(a, b) {
-  const aa = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
-}
-
-app.get("/api/health", async (_req, res) => {
-  try { await pool.query("SELECT 1"); res.json({ ok: true }); }
-  catch { res.status(503).json({ ok: false }); }
-});
-
-app.post("/api/orders", orderLimiter, async (req, res) => {
-  try {
-    const { customer, items } = req.body || {};
-    if (!customer || !validText(customer.name, 100) ||
-        !validText(customer.phone, 30) ||
-        !validText(customer.governorate, 60) ||
-        !validText(customer.address, 500) ||
-        (customer.notes != null && String(customer.notes).length > 1000)) {
-      return res.status(400).json({ error: "Please check your name, phone, governorate and address." });
-    }
-    if (!Array.isArray(items) || items.length < 1 || items.length > 20) {
-      return res.status(400).json({ error: "Your cart is empty or invalid." });
-    }
-
-    let total = 0;
-    const cleanItems = [];
-    for (const item of items) {
-      const product = PRODUCTS[item && item.id];
-      const qty = Number(item && item.qty);
-      if (!product || !Number.isInteger(qty) || qty < 1 || qty > 30) {
-        return res.status(400).json({ error: "One or more cart items are invalid." });
-      }
-      total += product.price * qty;
-      cleanItems.push({ id: item.id, name: product.name, qty, price: product.price });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO orders (customer_name, phone, governorate, address, notes, items, total_egp)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING id, created_at`,
-      [customer.name.trim(), customer.phone.trim(), customer.governorate.trim(),
-       customer.address.trim(), String(customer.notes || "").trim(),
-       JSON.stringify(cleanItems), total]
-    );
-    const order = result.rows[0];
-
-    if (process.env.SMTP_HOST && process.env.ORDER_ALERT_EMAIL) {
-      try {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          secure: process.env.SMTP_SECURE === "true",
-          auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined
-        });
-        await transporter.sendMail({
-          from: process.env.ORDER_FROM_EMAIL || process.env.SMTP_USER,
-          to: process.env.ORDER_ALERT_EMAIL,
-          subject: `New brüe order #${String(order.id).slice(0, 8)}`,
-          text: `New order received\nCustomer: ${customer.name}\nPhone: ${customer.phone}\nGovernorate: ${customer.governorate}\nAddress: ${customer.address}\nItems: ${cleanItems.map(i => i.name + " x" + i.qty).join(", ")}\nTotal: EGP ${total}`
-        });
-      } catch (mailError) {
-        console.error("Order email failed:", mailError.message);
-      }
-    }
-
-    return res.status(201).json({ ok: true, orderId: order.id, message: "Order received." });
-  } catch (error) {
-    console.error("Order creation failed:", error);
-    return res.status(500).json({ error: "Could not place your order. Please try again." });
-  }
-});
-
-app.post("/api/admin/login", loginLimiter, (req, res) => {
-  const password = req.body && req.body.password;
-  if (!validText(password, 300) || !safeEqual(password, ADMIN_PASSWORD)) {
-    return res.status(401).json({ error: "Incorrect password." });
-  }
-  req.session.regenerate(err => {
-    if (err) return res.status(500).json({ error: "Could not start admin session." });
-    req.session.isAdmin = true;
-    return req.session.save(saveErr => {
-      if (saveErr) return res.status(500).json({ error: "Could not save admin session." });
-      res.json({ ok: true });
-    });
-  });
-});
-app.get("/api/admin/me", (req, res) => res.json({ authenticated: !!(req.session && req.session.isAdmin) }));
-app.post("/api/admin/logout", requireAdmin, (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie("brue_admin", { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production" });
-    res.json({ ok: true });
-  });
-});
-app.get("/api/admin/orders", requireAdmin, async (_req, res) => {
-  try {
-    const result = await pool.query("SELECT id, customer_name, phone, governorate, address, notes, items, total_egp, status, created_at FROM orders ORDER BY created_at DESC LIMIT 500");
-    res.json({ orders: result.rows });
-  } catch (error) {
-    console.error("Admin order read failed:", error);
-    res.status(500).json({ error: "Could not load orders." });
-  }
-});
-app.patch("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
-  const { status } = req.body || {};
-  if (!STATUSES.includes(status)) return res.status(400).json({ error: "Invalid order status." });
-  try {
-    const result = await pool.query("UPDATE orders SET status=$1 WHERE id=$2 RETURNING id", [status, req.params.id]);
-    if (!result.rowCount) return res.status(404).json({ error: "Order not found." });
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("Order status update failed:", error);
-    res.status(500).json({ error: "Could not update order." });
-  }
-});
-
-app.use(express.static(path.join(__dirname), { index: "index.html", extensions: ["html"] }));
-app.use((req, res) => res.status(404).send("Not found"));
-
-pool.query(`
-  CREATE TABLE IF NOT EXISTS orders (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_name text NOT NULL,
-    phone text NOT NULL,
-    governorate text NOT NULL,
-    address text NOT NULL,
-    notes text,
-    items jsonb NOT NULL,
-    total_egp integer NOT NULL CHECK (total_egp >= 0),
-    status text NOT NULL DEFAULT 'New',
-    created_at timestamptz NOT NULL DEFAULT now()
-  )
-`).then(() => {
-  app.listen(PORT, "0.0.0.0", () => console.log(`brüe server listening on ${PORT}`));
-}).catch(error => {
-  console.error("Database initialization failed:", error);
-  process.exit(1);
-});
+const { DATABASE_URL, ADMIN_PASSWORD, SESSION_SECRET } = process.env;
+if (!DATABASE_URL || !ADMIN_PASSWORD || !SESSION_SECRET) { console.error("Missing required environment variables"); process.exit(1); }
+const pool = new Pool({ connectionString:DATABASE_URL, ssl:process.env.PGSSLMODE==="disable"?false:{rejectUnauthorized:false}, max:10, idleTimeoutMillis:30000, connectionTimeoutMillis:10000 });
+const STATUSES=["New","Confirmed","Preparing","Out for delivery","Delivered","Cancelled"];
+const SEED=[
+["br-01","Brazilian Coffee","Brazil","Smooth, nutty and beautifully balanced.","Medium roast","250g",450,"Best seller","https://images.unsplash.com/photo-1559525839-b184a4d698c7?auto=format&fit=crop&w=800&q=85",999],
+["br-02","Turkish Coffee","Classic","Fine-ground, rich and made for the cezve.","Medium-dark","250g",400,"A classic","https://images.unsplash.com/photo-1517256673644-36ad11246d21?auto=format&fit=crop&w=800&q=85",999],
+["br-03","Colombian Coffee","Colombia","Aromatic with a gentle fruity character.","Medium roast","250g",450,"Single origin","https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=85",999],
+["br-04","Espresso Blend","House blend","Deep, bold and made for espresso moments.","Dark roast","250g",500,"For espresso","https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=800&q=85",999]
+];
+app.set("trust proxy",1);
+app.use(helmet({contentSecurityPolicy:false}));
+app.use(express.json({limit:"30kb"}));
+app.use(express.urlencoded({extended:false,limit:"10kb"}));
+app.use(session({store:new pgSession({pool,tableName:"user_sessions",createTableIfMissing:true}),name:"brue_admin",secret:SESSION_SECRET,resave:false,saveUninitialized:false,cookie:{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"strict",maxAge:8*60*60*1000}}));
+const orderLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:"draft-7",legacyHeaders:false});
+const loginLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:"draft-7",legacyHeaders:false});
+function requireAdmin(req,res,next){if(req.session&&req.session.isAdmin===true)return next();return res.status(401).json({error:"Admin login required."});}
+function validText(v,max){return typeof v==="string"&&v.trim().length>0&&v.trim().length<=max;}
+function safeEqual(a,b){const aa=Buffer.from(String(a)),bb=Buffer.from(String(b));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}
+function cleanProduct(p){p=p||{};if(!validText(p.name,100)||!validText(p.origin,80)||!validText(p.description,500)||!validText(p.roast,60)||!validText(p.weight,30))return null;const price=Number(p.price),stock=Number(p.stock);const imageUrl=String(p.imageUrl||"").trim();if(!Number.isInteger(price)||price<1||price>1000000||!Number.isInteger(stock)||stock<0||stock>1000000||(imageUrl&&!/^https:\/\/[^\s"'<>]+$/i.test(imageUrl)))return null;return {name:p.name.trim(),origin:p.origin.trim(),description:p.description.trim(),roast:p.roast.trim(),weight:p.weight.trim(),price,stock,tag:String(p.tag||"").trim().slice(0,40),imageUrl};}
+function productJson(r){return {id:r.id,name:r.name,origin:r.origin,description:r.description,roast:r.roast,weight:r.weight,price:r.price,stock:r.stock,tag:r.tag,image:r.image_data?("/api/product-images/"+encodeURIComponent(r.id)):(r.image_url||"")};}
+app.get("/api/health",async(_q,s)=>{try{await pool.query("SELECT 1");s.json({ok:true});}catch{s.status(503).json({ok:false});}});
+app.get("/api/products",async(_q,s)=>{try{const r=await pool.query("SELECT * FROM products WHERE is_active=true ORDER BY created_at ASC");s.json({products:r.rows.map(productJson)});}catch(e){console.error(e);s.status(500).json({error:"Could not load products."});}});
+app.get("/api/product-images/:id",async(q,s)=>{try{const r=await pool.query("SELECT image_data,image_type FROM products WHERE id=$1",[q.params.id]);if(!r.rowCount||!r.rows[0].image_data)return s.sendStatus(404);s.set("Content-Type",r.rows[0].image_type);s.set("Cache-Control","public, max-age=3600");s.send(r.rows[0].image_data);}catch{s.sendStatus(500);}});
+app.post("/api/orders",orderLimiter,async(q,s)=>{const c=await pool.connect();try{const {customer,items}=q.body||{};if(!customer||!validText(customer.name,100)||!validText(customer.phone,30)||!validText(customer.governorate,60)||!validText(customer.address,500)||(customer.notes!=null&&String(customer.notes).length>1000))return s.status(400).json({error:"Please check your name, phone, governorate and address."});if(!Array.isArray(items)||items.length<1||items.length>20)return s.status(400).json({error:"Your cart is empty or invalid."});await c.query("BEGIN");let total=0;const clean=[];for(const item of items){const qty=Number(item&&item.qty);if(typeof(item&&item.id)!=="string"||!Number.isInteger(qty)||qty<1||qty>30)throw new Error("One or more cart items are invalid.");const found=await c.query("SELECT id,name,price,stock FROM products WHERE id=$1 AND is_active=true FOR UPDATE",[item.id]);if(!found.rowCount)throw new Error("A product in your cart is no longer available.");const p=found.rows[0];if(p.stock<qty)throw new Error(p.name+" does not have enough stock.");total+=p.price*qty;clean.push({id:p.id,name:p.name,qty,price:p.price});await c.query("UPDATE products SET stock=stock-$1,updated_at=now() WHERE id=$2",[qty,p.id]);}const saved=await c.query("INSERT INTO orders(customer_name,phone,governorate,address,notes,items,total_egp) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id",[customer.name.trim(),customer.phone.trim(),customer.governorate.trim(),customer.address.trim(),String(customer.notes||"").trim(),JSON.stringify(clean),total]);await c.query("COMMIT");const order=saved.rows[0];if(process.env.SMTP_HOST&&process.env.ORDER_ALERT_EMAIL){try{const t=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:process.env.SMTP_SECURE==="true",auth:process.env.SMTP_USER?{user:process.env.SMTP_USER,pass:process.env.SMTP_PASSWORD}:undefined});await t.sendMail({from:process.env.ORDER_FROM_EMAIL||process.env.SMTP_USER,to:process.env.ORDER_ALERT_EMAIL,subject:"New brüe order #"+String(order.id).slice(0,8),text:"New order received\nCustomer: "+customer.name+"\nPhone: "+customer.phone+"\nGovernorate: "+customer.governorate+"\nAddress: "+customer.address+"\nItems: "+clean.map(i=>i.name+" x"+i.qty).join(", ")+"\nTotal: EGP "+total});}catch(e){console.error("Order email failed:",e.message);}}s.status(201).json({ok:true,orderId:order.id,message:"Order received."});}catch(e){await c.query("ROLLBACK").catch(()=>{});console.error("Order creation failed:",e);s.status(400).json({error:e.message||"Could not place your order."});}finally{c.release();}});
+app.post("/api/admin/login",loginLimiter,(q,s)=>{const p=q.body&&q.body.password;if(!validText(p,300)||!safeEqual(p,ADMIN_PASSWORD))return s.status(401).json({error:"Incorrect password."});q.session.regenerate(e=>{if(e)return s.status(500).json({error:"Could not start admin session."});q.session.isAdmin=true;q.session.save(x=>{if(x)return s.status(500).json({error:"Could not save admin session."});s.json({ok:true});});});});
+app.get("/api/admin/me",(q,s)=>s.json({authenticated:!!(q.session&&q.session.isAdmin)}));
+app.post("/api/admin/logout",requireAdmin,(q,s)=>q.session.destroy(()=>{s.clearCookie("brue_admin",{httpOnly:true,sameSite:"strict",secure:process.env.NODE_ENV==="production"});s.json({ok:true});}));
+app.get("/api/admin/orders",requireAdmin,async(_q,s)=>{try{const r=await pool.query("SELECT id,customer_name,phone,governorate,address,notes,items,total_egp,status,created_at FROM orders ORDER BY created_at DESC LIMIT 500");s.json({orders:r.rows});}catch(e){console.error(e);s.status(500).json({error:"Could not load orders."});}});
+app.patch("/api/admin/orders/:id/status",requireAdmin,async(q,s)=>{const status=q.body&&q.body.status;if(!STATUSES.includes(status))return s.status(400).json({error:"Invalid order status."});try{const r=await pool.query("UPDATE orders SET status=$1 WHERE id=$2 RETURNING id",[status,q.params.id]);if(!r.rowCount)return s.status(404).json({error:"Order not found."});s.json({ok:true});}catch(e){console.error(e);s.status(500).json({error:"Could not update order."});}});
+app.get("/api/admin/products",requireAdmin,async(_q,s)=>{try{const r=await pool.query("SELECT * FROM products ORDER BY created_at DESC");s.json({products:r.rows.map(productJson)});}catch(e){console.error(e);s.status(500).json({error:"Could not load products."});}});
+app.post("/api/admin/products",requireAdmin,async(q,s)=>{const p=cleanProduct(q.body);if(!p)return s.status(400).json({error:"Check the fields. Price and stock must be valid; image URL must use HTTPS."});try{const id="br-"+crypto.randomUUID();const r=await pool.query("INSERT INTO products(id,name,origin,description,roast,weight,price,stock,tag,image_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",[id,p.name,p.origin,p.description,p.roast,p.weight,p.price,p.stock,p.tag,p.imageUrl]);s.status(201).json({product:productJson(r.rows[0])});}catch(e){console.error(e);s.status(500).json({error:"Could not create product."});}});
+app.put("/api/admin/products/:id",requireAdmin,async(q,s)=>{const p=cleanProduct(q.body);if(!p)return s.status(400).json({error:"Check the fields. Price and stock must be valid; image URL must use HTTPS."});try{const r=await pool.query("UPDATE products SET name=$2,origin=$3,description=$4,roast=$5,weight=$6,price=$7,stock=$8,tag=$9,image_data=CASE WHEN image_url IS DISTINCT FROM $10 THEN NULL ELSE image_data END,image_type=CASE WHEN image_url IS DISTINCT FROM $10 THEN NULL ELSE image_type END,image_url=$10,updated_at=now() WHERE id=$1 RETURNING *",[q.params.id,p.name,p.origin,p.description,p.roast,p.weight,p.price,p.stock,p.tag,p.imageUrl]);if(!r.rowCount)return s.status(404).json({error:"Product not found."});s.json({product:productJson(r.rows[0])});}catch(e){console.error(e);s.status(500).json({error:"Could not update product."});}});
+app.delete("/api/admin/products/:id",requireAdmin,async(q,s)=>{try{const r=await pool.query("UPDATE products SET is_active=false,updated_at=now() WHERE id=$1 AND is_active=true RETURNING id",[q.params.id]);if(!r.rowCount)return s.status(404).json({error:"Product not found."});s.json({ok:true});}catch(e){console.error(e);s.status(500).json({error:"Could not delete product."});}});
+app.put("/api/admin/products/:id/image",requireAdmin,express.raw({type:["image/jpeg","image/png","image/webp"],limit:"3mb"}),async(q,s)=>{const type=q.get("content-type");if(!["image/jpeg","image/png","image/webp"].includes(type)||!Buffer.isBuffer(q.body)||q.body.length<1)return s.status(400).json({error:"Choose a JPG, PNG or WebP image under 3 MB."});try{const r=await pool.query("UPDATE products SET image_data=$2,image_type=$3,image_url='',updated_at=now() WHERE id=$1 AND is_active=true RETURNING id",[q.params.id,q.body,type]);if(!r.rowCount)return s.status(404).json({error:"Product not found."});s.json({ok:true});}catch(e){console.error(e);s.status(500).json({error:"Could not save product image."});}});
+app.use(express.static(path.join(__dirname),{index:"index.html",extensions:["html"]}));
+app.use((q,s)=>s.status(404).send("Not found"));
+async function start(){await pool.query("CREATE TABLE IF NOT EXISTS orders(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),customer_name text NOT NULL,phone text NOT NULL,governorate text NOT NULL,address text NOT NULL,notes text,items jsonb NOT NULL,total_egp integer NOT NULL CHECK(total_egp>=0),status text NOT NULL DEFAULT 'New',created_at timestamptz NOT NULL DEFAULT now())");await pool.query("CREATE TABLE IF NOT EXISTS products(id text PRIMARY KEY,name text NOT NULL,origin text NOT NULL,description text NOT NULL,roast text NOT NULL,weight text NOT NULL,price integer NOT NULL CHECK(price>0),stock integer NOT NULL DEFAULT 0 CHECK(stock>=0),tag text NOT NULL DEFAULT '',image_url text NOT NULL DEFAULT '',image_data bytea,image_type text,is_active boolean NOT NULL DEFAULT true,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now())");for(const p of SEED)await pool.query("INSERT INTO products(id,name,origin,description,roast,weight,price,tag,image_url,stock) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING",p);app.listen(PORT,"0.0.0.0",()=>console.log("brüe server listening on "+PORT));}
+start().catch(e=>{console.error("Database initialization failed:",e);process.exit(1);});
