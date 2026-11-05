@@ -29,7 +29,7 @@ body{background:var(--site-bg,#1d1511);color:var(--site-text,#f1e4d3);font-famil
 .custom-content-block img{width:100%;max-height:560px;object-fit:cover}
 @media(max-width:650px){.custom-content-block{grid-template-columns:1fr;padding:65px 6%;gap:25px}}
 
-.section-wrap{width:min(100%,var(--site-content-width,1200px));margin-left:auto;margin-right:auto}
+.shop.section-wrap{max-width:var(--site-content-width,1200px);margin-left:auto;margin-right:auto}
 .topbar,footer{background:var(--site-bg,#1d1511);color:var(--site-text,#f1e4d3)}
 .hero{background:radial-gradient(ellipse at 72% 45%,color-mix(in srgb,var(--site-accent,#c99d79) 42%,var(--site-bg,#1d1511)) 0,var(--site-card,#2a1c15) 34%,var(--site-bg,#1d1511) 70%)}
 .intro-strip{color:var(--site-accent,#c99d79)}
