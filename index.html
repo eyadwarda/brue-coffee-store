@@ -11,41 +11,41 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="logo" href="#">br<span>ü</span>e<span class="dot">.</span></a>
+  <a class="logo" id="brandLogo" href="#">br<span>ü</span>e<span class="dot">.</span></a>
   <nav><a href="#shop">Shop</a><a href="#story">Our Story</a><a href="#contact">Contact</a></nav>
   <button class="cart-trigger" id="openCart" aria-label="Open shopping cart">Bag <span id="cartCount">0</span></button>
 </header>
 <main>
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">PREMIUM COFFEE · EGYPTIAN SOUL</p>
-      <h1>A better<br>kind of <i>brew.</i></h1>
-      <p class="hero-text">Thoughtfully selected coffee, made for slow mornings and long conversations.</p>
-      <a class="button button-light" href="#shop">Explore the collection <span>↗</span></a>
+      <p class="eyebrow" id="heroEyebrow">PREMIUM COFFEE · EGYPTIAN SOUL</p>
+      <h1 id="heroTitle">A better<br>kind of <i>brew.</i></h1>
+      <p class="hero-text" id="heroText">Thoughtfully selected coffee, made for slow mornings and long conversations.</p>
+      <a class="button button-light" id="heroButton" href="#shop">Explore the collection <span>↗</span></a>
     </div>
     <div class="hero-photo" role="img" aria-label="Freshly brewed coffee with roasted coffee beans"></div>
-    <div class="hero-note">GOOD COFFEE<br>GOOD MOOD.</div>
-    <div class="hero-index">01 — THE DAILY RITUAL</div>
+    <div class="hero-note" id="heroNote">GOOD COFFEE<br>GOOD MOOD.</div>
+    <div class="hero-index" id="heroIndex">01 — THE DAILY RITUAL</div>
   </section>
 
-  <section class="intro-strip"><span>ROASTED WITH INTENTION</span><span>•</span><span>MADE FOR YOUR MOMENT</span><span>•</span><span>BREW SOMETHING BETTER</span></section>
+  <section class="intro-strip" id="introStrip"><span>ROASTED WITH INTENTION</span><span>•</span><span>MADE FOR YOUR MOMENT</span><span>•</span><span>BREW SOMETHING BETTER</span></section>
 
   <section class="shop section-wrap" id="shop">
-    <div class="section-heading"><div><p class="eyebrow">THE COLLECTION / 01—04</p><h2>Find your <i>favourite.</i></h2></div><p>Four ways to make<br>the everyday special.</p></div>
+    <div class="section-heading"><div><p class="eyebrow" id="shopEyebrow">THE COLLECTION / 01—04</p><h2 id="shopTitle">Find your <i>favourite.</i></h2></div><p id="shopDescription">Four ways to make<br>the everyday special.</p></div>
     <div class="product-grid" id="productGrid"></div>
   </section>
 
   <section class="story" id="story">
-    <div class="story-image"></div>
-    <div class="story-copy"><p class="eyebrow">A LITTLE ABOUT US</p><h2>More than<br>just <i>coffee.</i></h2><p>At brüe, coffee is a ritual worth slowing down for. We bring together familiar favourites and coffees from around the world, with care in every cup.</p><a href="#contact" class="text-link">LET'S TALK COFFEE <span>↗</span></a></div>
-    <div class="story-aside"><div><b>01</b><span>Good beans<br>better moments</span></div><div><b>02</b><span>Made for your<br>daily ritual</span></div><div><b>03</b><span>Simple things,<br>done thoughtfully</span></div></div>
+    <div class="story-image" id="storyImage"></div>
+    <div class="story-copy"><p class="eyebrow" id="storyEyebrow">A LITTLE ABOUT US</p><h2 id="storyTitle">More than<br>just <i>coffee.</i></h2><p id="storyText">At brüe, coffee is a ritual worth slowing down for. We bring together familiar favourites and coffees from around the world, with care in every cup.</p><a href="#contact" class="text-link">LET'S TALK COFFEE <span>↗</span></a></div>
+    <div class="story-aside"><div><b>01</b><span id="storyFeature1">Good beans<br>better moments</span></div><div><b>02</b><span id="storyFeature2">Made for your<br>daily ritual</span></div><div><b>03</b><span id="storyFeature3">Simple things,<br>done thoughtfully</span></div></div>
   </section>
 
-  <section class="newsletter section-wrap"><p class="eyebrow">THE BRÜE LETTER</p><h2>A little coffee<br><i>in your inbox.</i></h2><p>Product news, brewing notes and good things only.</p><form id="newsletterForm"><input type="email" placeholder="Your email address" required><button class="button button-dark">Sign me up ↗</button></form></section>
+  <section class="newsletter section-wrap" id="newsletterSection"><p class="eyebrow" id="newsletterEyebrow">THE BRÜE LETTER</p><h2 id="newsletterTitle">A little coffee<br><i>in your inbox.</i></h2><p id="newsletterText">Product news, brewing notes and good things only.</p><form id="newsletterForm"><input type="email" placeholder="Your email address" required><button class="button button-dark">Sign me up ↗</button></form></section>
 </main>
 <footer id="contact">
-  <div class="footer-brand"><a class="logo" href="#">br<span>ü</span>e<span class="dot">.</span></a><p>Coffee, crafted differently.</p></div>
-  <div class="footer-contact"><p class="eyebrow">GET IN TOUCH</p><a href="mailto:eyadwarda06@gmail.com">eyadwarda06@gmail.com</a><a href="tel:+201098096407">+20 109 809 6407</a><a href="https://wa.me/201098096407" target="_blank" rel="noreferrer">Chat on WhatsApp ↗</a></div>
+  <div class="footer-brand"><a class="logo" id="footerLogo" href="#">br<span>ü</span>e<span class="dot">.</span></a><p id="footerTagline">Coffee, crafted differently.</p></div>
+  <div class="footer-contact"><p class="eyebrow">GET IN TOUCH</p><a id="contactEmail" href="mailto:eyadwarda06@gmail.com">eyadwarda06@gmail.com</a><a id="contactPhone" href="tel:+201098096407">+20 109 809 6407</a><a id="contactWhatsapp" href="https://wa.me/201098096407" target="_blank" rel="noreferrer">Chat on WhatsApp ↗</a></div>
   <div class="footer-end"><span>© 2026 brüe. All rights reserved.</span><a href="admin.html">Store admin</a><span>Made for coffee people.</span></div>
 </footer>
 
